@@ -82,7 +82,7 @@ function getTimeZoneOffset(date: Temporal.ZonedDateTime) {
 		milliseconds: Math.round(Math.abs(e1 - e2)),
 	});
 	const sign = e1 - e2 < 0 ? '-' : '+';
-	return `UTC ${sign}${plainTime.hour.toString().padStart(2, '0')}:${plainTime.minute.toString().padStart(2, '0')}`;
+	return `UTC ${sign}${plainTime.toString({ smallestUnit: 'minutes' })}`;
 }
 
 function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
