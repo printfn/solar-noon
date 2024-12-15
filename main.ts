@@ -1,4 +1,4 @@
-import { find as geotzFind } from 'geo-tz/now';
+import { find as geoTzFind } from 'geo-tz/now';
 import { exit } from 'node:process';
 import 'temporal-polyfill/global';
 
@@ -43,14 +43,12 @@ async function geocode(location: string) {
 	return json.map(location => ({ ...location, lat: parseFloat(location.lat), lon: parseFloat(location.lon) }));
 }
 
-function findTimezone(lat: number, lon: number) {
-	const tzs = geotzFind(lat, lon);
+function findTimezones(lat: number, lon: number) {
+	const tzs = geoTzFind(lat, lon);
 	if (tzs.length > 1) {
-		console.warn(`Warning: ambiguous time zones for coordinates ${lat},${lon}:`, tzs);
+		console.warn(`Warning: ambiguous time zones for coordinates ${lat},${lon}:`, tzs.join(', '));
 	}
-	const tz = tzs[0];
-	// console.debug(`Found time zone ${tz} for coordinates ${lat},${lon}`);
-	return tz;
+	return tzs;
 }
 
 function nextTransition(date: Temporal.ZonedDateTime): Temporal.ZonedDateTime | null {
@@ -89,13 +87,13 @@ function solarNoons(tz: string, lon: number) {
 }
 
 async function calculate(location: string) {
-	const coords = await geocode(location);
-	for (let i = 0; i < coords.length; ++i) {
+	const locations = (await geocode(location))
+		.flatMap(location => findTimezones(location.lat, location.lon).map(tz => ({ tz, location })));
+	for (let i = 0; i < locations.length; ++i) {
 		if (i > 0) {
 			console.log();
 		}
-		const location = coords[i];
-		const tz = findTimezone(location.lat, location.lon);
+		const { location, tz } = locations[i];
 		const noons = solarNoons(tz, location.lon);
 		console.log(`Location: ${location.display_name}`);
 		console.log(`Coordinates: ${location.lat}, ${location.lon}`);
