@@ -1,45 +1,97 @@
 import { find as geoTzFind } from 'geo-tz/now';
+import { readFile, writeFile } from 'node:fs/promises';
+import { sep } from 'node:path';
 import { exit } from 'node:process';
+import { brotliCompress, brotliDecompress } from 'node:zlib';
 import 'temporal-polyfill/global';
 
 const locale = 'en';
 
-async function geocode(location: string) {
-	const endpoint = 'https://nominatim.openstreetmap.org/search';
-	const url = `${endpoint}?q=${encodeURIComponent(location)}&format=jsonv2&accept-language=${locale}`;
+type Response = {
+	lat: string;
+	lon: string;
+	display_name: string;
+};
+
+const CACHE_FILEPATH = import.meta.dirname + sep + 'cache.json.br';
+
+type Cache = {
+	[url: string]: {
+		data: Response[];
+		lastCached: string;
+		lastRetrieved: string;
+	};
+};
+
+async function loadCache(): Promise<Cache> {
+	try {
+		const compressedData = await readFile(CACHE_FILEPATH, null);
+		const data = await new Promise<Buffer>((resolve, reject) =>
+			brotliDecompress(compressedData, (err, res) => {
+				if (err) {
+					reject(err);
+					return;
+				}
+				resolve(res);
+			}),
+		);
+		return JSON.parse(data.toString('utf-8'));
+	} catch (err) {
+		if (err.code === 'ENOENT') {
+			await saveCache({});
+			return await loadCache();
+		}
+		throw err;
+	}
+}
+
+async function saveCache(cache: Cache) {
+	const data = JSON.stringify(cache, null, 4);
+	const compressedData = await new Promise<Buffer>((resolve, reject) =>
+		brotliCompress(data, (err, res) => {
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(res);
+		}),
+	);
+	await writeFile(CACHE_FILEPATH, compressedData, null);
+}
+
+async function cachedFetch(url: string): Promise<Response[]> {
+	const cache: Cache = await loadCache();
+
+	if (cache[url]) {
+		const entry = cache[url];
+		entry.lastRetrieved = Temporal.Now.instant().toString();
+		await saveCache(cache);
+		return entry.data;
+	}
+
 	// console.debug(`GET ${url}`);
 	const response = await fetch(url, {
 		headers: {
-			'User-Agent': 'solar-noon-checker',
+			'User-Agent': 'github.com/printfn/solar-noon-checker',
 		},
 	});
-	type Response = {
-		lat: string;
-		lon: string;
-		display_name: string;
+	if (!response.ok) {
+		throw new Error(`failed to fetch ${url}: ${response.statusText}`);
+	}
+	const data: Response[] = await response.json();
+	cache[url] = {
+		data,
+		lastCached: Temporal.Now.instant().toString(),
+		lastRetrieved: Temporal.Now.instant().toString(),
 	};
-	const json: Response[] = await response.json();
-	/*
-[
-	{
-		place_id: 241348419,
-		licence: 'Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright',
-		osm_type: 'relation',
-		osm_id: 1543125,
-		lat: '35.6768601',
-		lon: '139.7638947',
-		category: 'boundary',
-		type: 'administrative',
-		place_rank: 8,
-		importance: 0.82108616521785,
-		addresstype: 'province',
-		name: 'Tokyo',
-		display_name: 'Tokyo, Japan',
-		boundingbox: [ '20.2145811', '35.8984245', '135.8536855', '154.2055410' ]
-	},
-	// ...
-]
-	*/
+	await saveCache(cache);
+	return data;
+}
+
+async function geocode(location: string) {
+	const endpoint = 'https://nominatim.openstreetmap.org/search';
+	const url = `${endpoint}?q=${encodeURIComponent(location)}&format=jsonv2&accept-language=${locale}`;
+	const json = await cachedFetch(url);
 	return json.map(location => ({
 		...location,
 		lat: parseFloat(location.lat),
