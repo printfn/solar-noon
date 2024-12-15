@@ -2,6 +2,7 @@ import { find as geoTzFind } from 'geo-tz/now';
 import { readFile, writeFile } from 'node:fs/promises';
 import { sep } from 'node:path';
 import { exit } from 'node:process';
+import { promisify } from 'node:util';
 import { brotliCompress, brotliDecompress } from 'node:zlib';
 import 'temporal-polyfill/global';
 
@@ -26,15 +27,7 @@ type Cache = {
 async function loadCache(): Promise<Cache> {
 	try {
 		const compressedData = await readFile(CACHE_FILEPATH, null);
-		const data = await new Promise<Buffer>((resolve, reject) =>
-			brotliDecompress(compressedData, (err, res) => {
-				if (err) {
-					reject(err);
-					return;
-				}
-				resolve(res);
-			}),
-		);
+		const data = await promisify(brotliDecompress)(compressedData);
 		return JSON.parse(data.toString('utf-8'));
 	} catch (err) {
 		if (err.code === 'ENOENT') {
@@ -47,15 +40,7 @@ async function loadCache(): Promise<Cache> {
 
 async function saveCache(cache: Cache) {
 	const data = JSON.stringify(cache, null, 4);
-	const compressedData = await new Promise<Buffer>((resolve, reject) =>
-		brotliCompress(data, (err, res) => {
-			if (err) {
-				reject(err);
-				return;
-			}
-			resolve(res);
-		}),
-	);
+	const compressedData = await promisify(brotliCompress)(data);
 	await writeFile(CACHE_FILEPATH, compressedData, null);
 }
 
