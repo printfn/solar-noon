@@ -1,0 +1,19 @@
+{
+  "name": "solar-noon",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "main.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "GPL-3.0-or-later",
+  "description": "",
+  "dependencies": {
+    "geo-tz": "^8.1.2",
+    "temporal-polyfill": "^0.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  }
+}
