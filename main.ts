@@ -40,22 +40,49 @@ async function geocode(location: string) {
 	// ...
 ]
 	*/
-	return json.map(location => ({ ...location, lat: parseFloat(location.lat), lon: parseFloat(location.lon) }));
+	return json.map(location => ({
+		...location,
+		lat: parseFloat(location.lat),
+		lon: parseFloat(location.lon),
+	}));
 }
 
 function findTimezones(lat: number, lon: number) {
 	const tzs = geoTzFind(lat, lon);
 	if (tzs.length > 1) {
-		console.warn(`Warning: ambiguous time zones for coordinates ${lat},${lon}:`, tzs.join(', '));
+		console.warn(
+			`Warning: ambiguous time zones for coordinates ${lat},${lon}:`,
+			tzs.join(', '),
+		);
 	}
 	return tzs;
 }
 
-function nextTransition(date: Temporal.ZonedDateTime): Temporal.ZonedDateTime | null {
+function nextTransition(
+	date: Temporal.ZonedDateTime,
+): Temporal.ZonedDateTime | null {
 	if ('getTimeZoneTransition' in date) {
 		return (date.getTimeZoneTransition as any)('next');
 	}
-	return date.getTimeZone().getNextTransition?.(date.toInstant())?.toZonedDateTimeISO(date.timeZoneId) ?? null;
+	return (
+		date
+			.getTimeZone()
+			.getNextTransition?.(date.toInstant())
+			?.toZonedDateTimeISO(date.timeZoneId) ?? null
+	);
+}
+
+function getTimeZoneOffset(date: Temporal.ZonedDateTime) {
+	const e1 = date
+		.toPlainDateTime()
+		.toZonedDateTime('UTC')
+		.toInstant().epochMilliseconds;
+	const e2 = date.toInstant().epochMilliseconds;
+	const plainTime = Temporal.PlainTime.from('00:00').add({
+		milliseconds: Math.round(Math.abs(e1 - e2)),
+	});
+	const sign = e1 - e2 < 0 ? '-' : '+';
+	return `UTC ${sign}${plainTime.hour.toString().padStart(2, '0')}:${plainTime.minute.toString().padStart(2, '0')}`;
 }
 
 function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
@@ -64,11 +91,12 @@ function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
 			timeZone: 'UTC',
 			plainDate: date.toPlainDate(),
 		})
-		.subtract({ milliseconds: Math.round(lon / 180 * 12 * 60 * 60 * 1000) })
+		.subtract({ milliseconds: Math.round((lon / 180) * 12 * 60 * 60 * 1000) })
 		.withTimeZone(date.timeZoneId);
 	return {
 		date: noon.toPlainDate().toLocaleString(locale, { dateStyle: 'full' }),
 		time: noon.toPlainTime().toLocaleString(locale, { timeStyle: 'long' }),
+		tz: getTimeZoneOffset(noon),
 	};
 }
 
@@ -87,8 +115,9 @@ function solarNoons(tz: string, lon: number) {
 }
 
 async function calculate(location: string) {
-	const locations = (await geocode(location))
-		.flatMap(location => findTimezones(location.lat, location.lon).map(tz => ({ tz, location })));
+	const locations = (await geocode(location)).flatMap(location =>
+		findTimezones(location.lat, location.lon).map(tz => ({ tz, location })),
+	);
 	for (let i = 0; i < locations.length; ++i) {
 		if (i > 0) {
 			console.log();
@@ -98,12 +127,16 @@ async function calculate(location: string) {
 		console.log(`Location: ${location.display_name}`);
 		console.log(`Coordinates: ${location.lat}, ${location.lon}`);
 		console.log(`Time zone: ${tz}`);
-		console.log(`Solar noon is currently at ${noons.current.time}`);
+		console.log(
+			`Solar noon is currently at ${noons.current.time} (${noons.current.tz})`,
+		);
 		if (noons.futureTransitions.length === 0) {
-			console.log('No daylight saving or other time zone changes are scheduled.');
+			console.log(
+				'No daylight saving or other time zone changes are scheduled.',
+			);
 		} else {
-			for (const { date, time } of noons.futureTransitions) {
-				console.log(`From ${date}, solar noon will shift to ${time}`);
+			for (const { date, time, tz } of noons.futureTransitions) {
+				console.log(`From ${date}, solar noon will shift to ${time} (${tz})`);
 			}
 		}
 	}
