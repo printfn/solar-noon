@@ -109,17 +109,23 @@ function nextTransition(
 	);
 }
 
-function getTimeZoneOffset(date: Temporal.ZonedDateTime) {
-	const e1 = date
-		.toPlainDateTime()
-		.toZonedDateTime('UTC')
-		.toInstant().epochMilliseconds;
-	const e2 = date.toInstant().epochMilliseconds;
+function getTimeZoneOffset(date: Temporal.ZonedDateTime | Temporal.Duration) {
+	let offsetMs = 0;
+	if (date instanceof Temporal.ZonedDateTime) {
+		const e1 = date
+			.toPlainDateTime()
+			.toZonedDateTime('UTC')
+			.toInstant().epochMilliseconds;
+		const e2 = date.toInstant().epochMilliseconds;
+		offsetMs = e1 - e2;
+	} else {
+		offsetMs = date.total('milliseconds');
+	}
 	const plainTime = Temporal.PlainTime.from('00:00').add({
-		milliseconds: Math.round(Math.abs(e1 - e2)),
+		milliseconds: Math.round(Math.abs(offsetMs)),
 	});
-	const sign = e1 - e2 < 0 ? '-' : '+';
-	return `UTC ${sign}${plainTime.toString({ smallestUnit: 'minutes' })}`;
+	const sign = offsetMs < 0 ? '-' : '+';
+	return `UTC${sign}${plainTime.toString({ smallestUnit: 'minutes' })}`;
 }
 
 function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
@@ -176,6 +182,10 @@ async function calculate(location: string) {
 				console.log(`From ${date}, solar noon will shift to ${time} (${tz})`);
 			}
 		}
+		const optimalTz = getTimeZoneOffset(
+			Temporal.Duration.from({ hours: Math.round((location.lon / 180) * 12) }),
+		);
+		console.log(`The optimal whole-hour UTC offset would be ${optimalTz}`);
 	}
 }
 
