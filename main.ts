@@ -109,23 +109,12 @@ function nextTransition(
 	);
 }
 
-function getTimeZoneOffset(date: Temporal.ZonedDateTime | Temporal.Duration) {
-	let offsetMs = 0;
-	if (date instanceof Temporal.ZonedDateTime) {
-		const e1 = date
-			.toPlainDateTime()
-			.toZonedDateTime('UTC')
-			.toInstant().epochMilliseconds;
-		const e2 = date.toInstant().epochMilliseconds;
-		offsetMs = e1 - e2;
-	} else {
-		offsetMs = date.total('milliseconds');
-	}
-	const plainTime = Temporal.PlainTime.from('00:00').add({
-		milliseconds: Math.round(Math.abs(offsetMs)),
-	});
-	const sign = offsetMs < 0 ? '-' : '+';
-	return `UTC${sign}${plainTime.toString({ smallestUnit: 'minutes' })}`;
+function getTimeZoneOffset(offset: Temporal.Duration) {
+	const plainTime = Temporal.PlainTime.from('00:00')
+		.add(offset.abs())
+		.toString({ smallestUnit: 'minutes' });
+	const sign = offset.sign < 0 ? '-' : '+';
+	return new Temporal.ZonedDateTime(0n, `${sign}${plainTime}`).offset;
 }
 
 function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
@@ -139,7 +128,7 @@ function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
 	return {
 		date: noon.toPlainDate().toLocaleString(locale, { dateStyle: 'full' }),
 		time: noon.toPlainTime().toLocaleString(locale, { timeStyle: 'long' }),
-		tz: getTimeZoneOffset(noon),
+		tz: noon.offset,
 	};
 }
 
