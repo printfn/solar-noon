@@ -101,11 +101,14 @@ function nextTransition(
 	if ('getTimeZoneTransition' in date) {
 		return (date.getTimeZoneTransition as any)('next');
 	}
+	let tz: Temporal.TimeZoneProtocol;
+	if ('timeZone' in date) {
+		tz = date.timeZone as Temporal.TimeZoneProtocol;
+	} else {
+		tz = date.getTimeZone();
+	}
 	return (
-		date
-			.getTimeZone()
-			.getNextTransition?.(date.toInstant())
-			?.toZonedDateTimeISO(date.timeZoneId) ?? null
+		tz.getNextTransition?.(date.toInstant())?.toZonedDateTimeISO(tz) ?? null
 	);
 }
 
