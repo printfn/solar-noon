@@ -117,19 +117,13 @@ function getTimeZoneOffset(offset: Temporal.Duration) {
 	return new Temporal.ZonedDateTime(0n, `${sign}${plainTime}`).offset;
 }
 
-function solarNoon(date: Temporal.ZonedDateTime, lon: number) {
-	const noon = Temporal.PlainTime.from('12:00')
-		.toZonedDateTime({
-			timeZone: 'UTC',
-			plainDate: date.toPlainDate(),
-		})
-		.subtract({ milliseconds: Math.round((lon / 180) * 12 * 60 * 60 * 1000) })
-		.withTimeZone(date.timeZoneId);
-	return {
-		date: noon.toPlainDate().toLocaleString(locale, { dateStyle: 'full' }),
-		time: noon.toPlainTime().toLocaleString(locale, { timeStyle: 'long' }),
-		tz: noon.offset,
-	};
+function nextSolarNoon(date: Temporal.ZonedDateTime, lon: number) {
+	const solarNoon = 43200000 - Math.round((lon / 180) * 12 * 60 * 60 * 1000);
+	let diff = solarNoon - (date.epochMilliseconds % 86400000);
+	while (diff < 0) {
+		diff += 86400000;
+	}
+	return date.add({ milliseconds: diff });
 }
 
 function solarNoons(tz: string, lon: number) {
@@ -141,8 +135,11 @@ function solarNoons(tz: string, lon: number) {
 		futureTransitions.push(nextDate);
 	}
 	return {
-		current: solarNoon(now, lon),
-		futureTransitions: futureTransitions.map(d => solarNoon(d, lon)),
+		current: nextSolarNoon(now, lon),
+		futureTransitions: futureTransitions.map(d => ({
+			transition: d,
+			solarNoon: nextSolarNoon(d, lon),
+		})),
 	};
 }
 
@@ -159,16 +156,27 @@ async function calculate(location: string) {
 		console.log(`Location: ${location.display_name}`);
 		console.log(`Coordinates: ${location.lat}, ${location.lon}`);
 		console.log(`Time zone: ${tz}`);
+		const formattedCurrentNoonTime = noons.current
+			.toPlainTime()
+			.toLocaleString(locale, { timeStyle: 'long' });
 		console.log(
-			`Solar noon is currently at ${noons.current.time} (${noons.current.tz})`,
+			`Solar noon is currently at ${formattedCurrentNoonTime} (${noons.current.offset})`,
 		);
 		if (noons.futureTransitions.length === 0) {
 			console.log(
 				'No daylight saving or other time zone changes are scheduled.',
 			);
 		} else {
-			for (const { date, time, tz } of noons.futureTransitions) {
-				console.log(`From ${date}, solar noon will shift to ${time} (${tz})`);
+			for (const { transition, solarNoon } of noons.futureTransitions) {
+				const formattedTransitionDate = transition
+					.toPlainDate()
+					.toLocaleString(locale, { dateStyle: 'full' });
+				const formattedSolarNoonTime = solarNoon
+					.toPlainTime()
+					.toLocaleString(locale, { timeStyle: 'long' });
+				console.log(
+					`From ${formattedTransitionDate}, solar noon will shift to ${formattedSolarNoonTime} (${solarNoon.offset})`,
+				);
 			}
 		}
 		const optimalTz = getTimeZoneOffset(
