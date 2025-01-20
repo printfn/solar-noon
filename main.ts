@@ -99,12 +99,15 @@ function nextTransition(
 	date: Temporal.ZonedDateTime,
 ): Temporal.ZonedDateTime | null {
 	if ('getTimeZoneTransition' in date) {
+		// Temporal spec
 		return (date.getTimeZoneTransition as any)('next');
 	}
 	let tz: Temporal.TimeZoneProtocol;
 	if ('timeZone' in date) {
+		// v8 (e.g. `node --harmony-temporal`)
 		tz = date.timeZone as Temporal.TimeZoneProtocol;
 	} else {
+		// temporal-polyfill 0.2.5
 		tz = date.getTimeZone();
 	}
 	return (
@@ -120,13 +123,17 @@ function getTimeZoneOffset(offset: Temporal.Duration) {
 	return new Temporal.ZonedDateTime(0n, `${sign}${plainTime}`).offset;
 }
 
+function euclidMod(a: bigint, b: bigint) {
+	return ((a % b) + b) % b;
+}
+
 function nextSolarNoon(date: Temporal.ZonedDateTime, lon: number) {
-	const solarNoon = 43200000 - Math.round((lon / 180) * 12 * 60 * 60 * 1000);
-	let diff = solarNoon - (date.epochMilliseconds % 86400000);
-	while (diff < 0) {
-		diff += 86400000;
-	}
-	return date.add({ milliseconds: diff });
+	const solarNoon =
+		43200000000000 - Math.round((lon / 180) * 12 * 60 * 60 * 1000000000);
+	const diff = Number(
+		euclidMod(BigInt(solarNoon) - date.epochNanoseconds, 86400000000000n),
+	);
+	return date.add({ nanoseconds: diff });
 }
 
 function solarNoons(tz: string, lon: number) {
