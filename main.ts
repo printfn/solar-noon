@@ -100,18 +100,14 @@ function nextTransition(
 ): Temporal.ZonedDateTime | null {
 	if ('getTimeZoneTransition' in date) {
 		// Temporal spec
-		return (date.getTimeZoneTransition as any)('next');
+		return date.getTimeZoneTransition('next');
 	}
-	let tz: Temporal.TimeZoneProtocol;
-	if ('timeZone' in date) {
-		// v8 (e.g. `node --harmony-temporal`)
-		tz = date.timeZone as Temporal.TimeZoneProtocol;
-	} else {
-		// temporal-polyfill 0.2.5
-		tz = date.getTimeZone();
-	}
+	// v8 (e.g. `node --harmony-temporal`)
+	const tz = (date as any).timeZone;
 	return (
-		tz.getNextTransition?.(date.toInstant())?.toZonedDateTimeISO(tz) ?? null
+		tz
+			.getNextTransition?.((date as Temporal.ZonedDateTime).toInstant())
+			?.toZonedDateTimeISO(tz) ?? null
 	);
 }
 
